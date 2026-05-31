@@ -1,194 +1,154 @@
-from datetime import datetime  # Self-explanatory.
+import sys
+from time import localtime  # To give exit codes.
+from PySide6.QtCore import Qt, QDateTime, QDate  # For alignment and other flags.
+from PySide6.QtGui import QCursor  # For tooltips.
+from PySide6.QtWidgets import *  # Main GUI components.
+import datetime as dt  # For dates, times, and timezones.
 import pyperclip  # Clipboard functions.
-import customtkinter as ctk  # GUI.
-from typing import Callable
+from typing import cast  # To prevent false red underlines by VS Code.
 
 
-# This function might be deleted later.
-def list_years():
-    # ISSUE: If current date is before epoch, then a negative value occurs.
-    # However this shouldn't matter because times before the epoch are impossible
-    # to display on discord (without integer overflow).
-    numYears = datetime.now().year - datetime.fromtimestamp(0).year
+# QWidget used as QMainWindow's features are unnecessary for this app.
+class TimestamperUI(QWidget):
+    DEFAULT_MIN_DATE = QDate(1970, 1, 1)
 
-    year_list = [str(datetime.fromtimestamp(0).year + i) for i in range(numYears + 50)]
-
-    return year_list
-
-
-# Example code from CTk docs.
-class FloatSpinbox(ctk.CTkFrame):
-    def __init__(
-        self,
-        *args,
-        width: int = 100,
-        height: int = 32,
-        step_size: int | float = 1,
-        command: Callable | None = None,
-        **kwargs,
-    ):
-        super().__init__(*args, width=width, height=height, **kwargs)
-
-        self.step_size = step_size
-        self.command = command
-
-        self.configure(fg_color=("gray78", "gray28"))  # set frame color
-
-        self.grid_columnconfigure((0, 2), weight=0)  # buttons don't expand
-        self.grid_columnconfigure(1, weight=1)  # entry expands
-
-        self.subtract_button = ctk.CTkButton(
-            self,
-            text="-",
-            width=height - 6,
-            height=height - 6,
-            command=self.subtract_button_callback,
-        )
-        self.subtract_button.grid(row=0, column=0, padx=(3, 0), pady=3)
-
-        self.entry = ctk.CTkEntry(
-            self, width=width - (2 * height), height=height - 6, border_width=0
-        )
-        self.entry.grid(row=0, column=1, columnspan=1, padx=3, pady=3, sticky="ew")
-
-        self.add_button = ctk.CTkButton(
-            self,
-            text="+",
-            width=height - 6,
-            height=height - 6,
-            command=self.add_button_callback,
-        )
-        self.add_button.grid(row=0, column=2, padx=(0, 3), pady=3)
-
-        # default value
-        self.entry.insert(0, "0.0")
-
-    def add_button_callback(self):
-        if self.command is not None:
-            self.command()
-        try:
-            value = float(self.entry.get()) + self.step_size
-            self.entry.delete(0, "end")
-            self.entry.insert(0, value)
-        except ValueError:
-            return
-
-    def subtract_button_callback(self):
-        if self.command is not None:
-            self.command()
-        try:
-            value = float(self.entry.get()) - self.step_size
-            self.entry.delete(0, "end")
-            self.entry.insert(0, value)
-        except ValueError:
-            return
-
-    def get(self) -> float | None:
-        try:
-            return float(self.entry.get())
-        except ValueError:
-            return None
-
-    def set(self, value: float):
-        self.entry.delete(0, "end")
-        self.entry.insert(0, str(float(value)))
-
-
-# END CTk docs example
-
-
-class TimestamperApp(ctk.CTk):
     def __init__(self):
-
-        ### Instance variables ###
-        self.mode: str
-        self.chosen_date: datetime
-
-        ### GUI Setup ###
         super().__init__()
-        self.geometry("500x500")
-        self.title("Discord Timestamper")
-        self.grid_columnconfigure(0, weight=1)
-        # weight = int, >= 0.
-        # Determines how much widgets scale when window is resized.
-        # Weight=1 = fill all extra space from resizing.
-        # If a different row has a different number (say weight=2), then twice as much free space will be taken by the row with weight=2 as the row with weight=1.
-        # Weight=0 = no filling extra space.
-        # self.gui.grid_rowconfigure(0, weight=1)
+        self.setup_ui()
 
-        ## Date entry box ##
-        # Create widget.
-        self.entry_box = ctk.CTkEntry(
-            self,
-            placeholder_text="Enter date",
-            width=200,
-            height=40,
-        )
-        # Place widget (entry box) on grid, making it visible.
-        self.entry_box.grid(
-            row=0,
-            column=0,
-            sticky="ew",
-            padx=50,
-            pady=10,
+    def setup_ui(self):
+        """Builds UI and initializes properties."""
+
+        self.setWindowTitle("Timestamper")
+        self.setMinimumSize(300, 300)
+
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+
+        ### Properties and frequently-used local variables ###
+
+        # .astimezone(), when called without args, gives a datetime object with
+        # the computer's local timezone.
+        now = dt.datetime.now().astimezone()
+
+        # Let seconds be 0 since the QDateTimeEdit widget doesn't support seconds.
+        now_as_QDateTime = QDateTime(
+            now.year, now.month, now.day, now.hour, now.minute, 0
         )
 
-        ## Year drop-down Menu (combobox, to be reworked) ##
-        self.year_input = ctk.CTkComboBox(
-            self,
-            values=list_years(),
+        self.local_utc_offset = now.utcoffset()
+
+        ### Create Widgets ###
+
+        # Date/time selector widget, default to current date/time.
+        self.datetime_edit = QDateTimeEdit(
+            now_as_QDateTime,
+            minimumDate=TimestamperUI.DEFAULT_MIN_DATE,
         )
-        self.year_input.grid(
-            row=1,
-            column=0,
-            sticky="w",
-            padx=50,
-            pady=10,
+        self.datetime_edit.setCalendarPopup(True)
+
+        # Copy to Clipboard button
+        self.copy_button = QPushButton("Copy to Clipboard")
+        self.copy_button.clicked.connect(self.on_copy_to_clipboard_clicked)
+
+        # Timezone dropdown label
+        timezone_dropdown_label = QLabel(
+            "Select a timezone below. You're OS's timezone is automatically selected at launch."
+        )
+        timezone_dropdown_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
+
+        # Timezone dropdown
+        self.timezone_dropdown = QComboBox()
+        self.timezone_dropdown.addItems(self.generate_utc_offset_strings())
+
+        # Set selected timezone to local timezone.
+        if self.local_utc_offset is not None:
+            local_timezone = dt.timezone(self.local_utc_offset)
+            self.timezone_dropdown.setCurrentText(f"{local_timezone}")
+
+        # Checkboxes
+
+        checkbox_layout = QHBoxLayout()
+
+        self.checkbox1 = QCheckBox("Check box1?")
+        self.checkbox2 = QCheckBox("Check box2?")
+
+        checkbox_layout.addWidget(self.checkbox1)
+        checkbox_layout.addWidget(self.checkbox2)
+
+        ### Place widgets on main layout ###
+        main_layout.addWidget(
+            self.datetime_edit, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
+        main_layout.addWidget(timezone_dropdown_label)
+        main_layout.addWidget(self.timezone_dropdown)
+        main_layout.addWidget(self.copy_button)
+
+        main_layout.addLayout(checkbox_layout)
+
+    ### Helpers ###
+    def generate_utc_offset_strings(self) -> list[str]:
+        """Returns a list of all possible UTC offsets (in 15 minute increments)."""
+
+        offset_strings = []
+
+        # Minutes used for easy timedelta creation.
+        min_minutes = -12 * 60  # UTC-12:00
+        max_minutes = 14 * 60  # UTC+14:00
+
+        # timedelta/timezone used so that strings will match datetime objects exactly
+        # (even if the format changes one day).
+        for current_minutes in range(min_minutes, max_minutes + 15, 15):
+            current_timedelta = dt.timedelta(minutes=current_minutes)
+
+            # Make timezone object to get the form "UTC±HH:MM"
+            timezone_from_delta = dt.timezone(current_timedelta)
+            offset_strings.append(str(timezone_from_delta))
+
+        return offset_strings
+
+    ### "Slots", the event handling methods ###
+    def on_copy_to_clipboard_clicked(self):
+        """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
+
+        # cast() used here to remove the red underline in code editors.
+        # (Because .toPython()'s type hints return type "Object", not datetime,
+        # even though it *is* a datetime object.)
+        chosen_date_time: dt.datetime = cast(
+            dt.datetime, self.datetime_edit.dateTime().toPython()
         )
 
-        ## "Copy to Clipboard" button ##
-        self.copy_button = ctk.CTkButton(
-            self,
-            text="Copy to Clipboard",
-            command=self.copy_to_clipboard,
-        )
-        self.copy_button.grid(
-            row=2,
-            column=0,
-            columnspan=2,
-            padx=10,
-            pady=10,
-            sticky="nsew",
-        )
+        # int() used to remove fractional part of timestamp.
+        unix_timestamp = int(chosen_date_time.timestamp())
 
-        self.test_spinbox = FloatSpinbox(self)
-        self.test_spinbox.grid(row=3, column=0, sticky="nsew")
-
-        self.mainloop()
-
-    def copy_to_clipboard(self):
-        chosen_date = datetime.strptime(self.entry_box.get(), "%Y-%m-%d %H:%M:%S")
-        unix_timestamp = int(chosen_date.timestamp())
+        # TODO: Copy selected type of timestamp (mode), not only Relative.
         formatted_timestamp = f"<t:{unix_timestamp}:R>"
 
         print(
-            f'"{chosen_date.strftime("%Y-%m-%d %H:%M:%S")}" has a Relative Discord timestamp of: {formatted_timestamp}\nCopying to clipboard...'
+            f'"{chosen_date_time}" has a Relative Discord timestamp of: {formatted_timestamp}\nCopying to clipboard...'
         )
+
         pyperclip.copy(formatted_timestamp)
+
         print("Copied!")
 
-    def generate_timestamp(self):
-        pass
+
+# NOTE: This block will only be run if the module (file) is run directly, not imported.
+# __name__ is a built-in variable that says the name of what is using the module [file].
+# i.e. __name__ == "__main__" if run from cmd/double-clicked files.
+# Otherwise, __name__ will equal whatever the import statement is, like:
+#  import timestamper  -->  __name__ == "timestamper"
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TimestamperUI()
+    window.show()
+    sys.exit(app.exec())
 
 
-print(datetime.fromtimestamp(0))
-program = TimestamperApp()
+##### NOTES #####
+# for hotkeys use QKeySequenceEdit()
 
 
-##### IDEAS #####
-# 1. Add entry boxes for year, month, day, hour, minute, and second.
-# 2. Add checkboxes for each discord timestamp mode (:R, :F, etc).
-# 3. Add a text box for the timestamp to be displayed.
-# 4. EITHER: Add a checkbox for whether to copy to clipboard upon generating timestamp,
-#    OR: Use the existing "Copy to Clipboard" button, placed by the timestamp text box.
-# 5. Add a "Generate Timestamp" button that does at it says.
+##### IDEAS (arbitrarily numbered) #####
+# 1. Add option to override minimum date of jan 1 1970.
+# 2. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
