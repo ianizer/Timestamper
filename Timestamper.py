@@ -113,14 +113,14 @@ class TimestamperUI(QWidget):
 
         self.local_utc_offset = now.utcoffset()
 
-        self.timestamp_displays = []
+        self.timestamp_displays: list[TimestampDisplay] = []
 
         ### Create Widgets ###
 
         # Date/time setter label
 
         date_selector_label = QLabel(
-            "Select the date/time to convert below (YYYY-MM-DD)."
+            "<b>Select the date/time to convert below</b> <i>(YYYY-MM-DD)</i>."
         )
 
         # NOTE: Alignment flags are 1-digit binary ints, so a bitwise OR (|) combines flags.
@@ -143,15 +143,30 @@ class TimestamperUI(QWidget):
 
         # Checkbox for using 24-hour time.
         self.use_military_time_cb = QCheckBox("Use military (24-hour) time?")
-        self.use_military_time_cb.checkStateChanged.connect(self.on_military_time_cb_changed)
+        self.use_military_time_cb.checkStateChanged.connect(
+            self.on_military_time_cb_changed
+        )
 
-        dt_layout.addWidget(self.use_military_time_cb, alignment=Qt.AlignmentFlag.AlignLeft)
+        dt_layout.addWidget(
+            self.use_military_time_cb, alignment=Qt.AlignmentFlag.AlignLeft
+        )
 
         main_layout.addLayout(dt_layout)
 
+        # Generate timestamp button
+        self.generate_timestamp_button = QPushButton("Generate Timestamps")
+        self.generate_timestamp_button.clicked.connect(
+            self.on_generate_timestamp_clicked
+        )
+        self.generate_timestamp_button.setMinimumSize(300, 50)  # TODO: Make it look better.
+
+        main_layout.addWidget(
+            self.generate_timestamp_button, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
+
         # Timezone dropdown label
         timezone_dropdown_label = QLabel(
-            "Select a timezone below.\n(Your OS's timezone is automatically selected at launch.)"
+            "<b>Select a timezone below.</b>\n<i>(Your OS's timezone is automatically selected at launch.)</i>"
         )
         timezone_dropdown_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
         main_layout.addWidget(timezone_dropdown_label)
@@ -165,8 +180,6 @@ class TimestamperUI(QWidget):
             self.timezone_dropdown.setCurrentText(f"{local_timezone}")
 
         main_layout.addWidget(self.timezone_dropdown)
-
-        # Generate timestamp button
 
         # Timestamp displays
         timestamp_layout = QVBoxLayout()
@@ -215,12 +228,14 @@ class TimestamperUI(QWidget):
     ### "Slots", the event handling methods ###
 
     def on_military_time_cb_changed(self):
+        """Changes format (12H/24H) of the date/time entry box."""
+
         if self.use_military_time_cb.isChecked():
             self.datetime_edit.setDisplayFormat(self.MILITARY_TIME_FORMAT)
         else:
             self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
 
-    def on_copy_to_clipboard_clicked(self):  # To be deleted.
+    def on_generate_timestamp_clicked(self):
         """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
 
         # cast() used here to remove the red underline in code editors.
@@ -233,16 +248,8 @@ class TimestamperUI(QWidget):
         # int() used to remove fractional part of timestamp.
         unix_timestamp = int(chosen_date_time.timestamp())
 
-        # TODO: Copy selected type of timestamp (mode), not only Relative.
-        formatted_timestamp = f"<t:{unix_timestamp}:R>"
-
-        print(
-            f'"{chosen_date_time}" has a Relative Discord timestamp of: {formatted_timestamp}\nCopying to clipboard...'
-        )
-
-        # pyperclip.copy(formatted_timestamp)
-
-        print("Copied!")
+        for display in self.timestamp_displays:
+            display.display_new_timestamp(unix_timestamp)
 
 
 # NOTE: This block will only be run if the module (file) is run directly, not imported.
