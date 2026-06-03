@@ -1,5 +1,5 @@
 import sys
-from time import localtime  # To give exit codes.
+from time import localtime, timezone  # To give exit codes.
 from PySide6.QtCore import Qt, QDateTime, QDate  # For alignment and other flags.
 from PySide6.QtGui import QCursor  # For tooltips.
 from PySide6.QtWidgets import *  # Main GUI components.
@@ -158,7 +158,9 @@ class TimestamperUI(QWidget):
         self.generate_timestamp_button.clicked.connect(
             self.on_generate_timestamp_clicked
         )
-        self.generate_timestamp_button.setMinimumSize(300, 50)  # TODO: Make it look better.
+        self.generate_timestamp_button.setMinimumSize(
+            300, 50
+        )  # TODO: Make it look better.
 
         main_layout.addWidget(
             self.generate_timestamp_button, alignment=Qt.AlignmentFlag.AlignHCenter
@@ -238,15 +240,37 @@ class TimestamperUI(QWidget):
     def on_generate_timestamp_clicked(self):
         """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
 
+        selected_timezone_str: str = self.timezone_dropdown.currentText()
+        selected_timezone_str = (
+            "00:00" if selected_timezone_str == "UTC" else selected_timezone_str[3:]
+        )
+        split_timezone_str: list = selected_timezone_str.split(":")
+        selected_tz_hours: int = int(split_timezone_str[0])
+        selected_tz_minutes: int = int(split_timezone_str[1])
+
+        selected_timezone: dt.timezone = dt.timezone(
+            dt.timedelta(hours=selected_tz_hours, minutes=selected_tz_minutes)
+        )
+
         # cast() used here to remove the red underline in code editors.
         # (Because .toPython()'s type hints return type "Object", not datetime,
         # even though it *is* a datetime object.)
         chosen_date_time: dt.datetime = cast(
             dt.datetime, self.datetime_edit.dateTime().toPython()
-        )
+        ).replace(tzinfo=selected_timezone)
 
         # int() used to remove fractional part of timestamp.
-        unix_timestamp = int(chosen_date_time.timestamp())
+        epoch = dt.datetime(
+            year=1970,
+            month=1,
+            day=1,
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+            tzinfo=dt.UTC,
+        )
+        unix_timestamp = int((chosen_date_time - epoch).total_seconds())
 
         for display in self.timestamp_displays:
             display.display_new_timestamp(unix_timestamp)
@@ -271,5 +295,4 @@ if __name__ == "__main__":
 ##### IDEAS (arbitrarily numbered) #####
 # 1. Add option to override minimum date of jan 1 1970.
 # 2. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
-# 3. EITHER: On change of the DateTimeEdit, run the display_new_timestamp() method for each timestamp display,
-#    OR: Add a dedicated button "Generate Timestamps" for this purpose.
+# 3. Make "Generate Timestamps" button glow or have an outline or something like that when there are changes to the datetime_edit.
