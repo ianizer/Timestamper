@@ -4,13 +4,87 @@ from PySide6.QtCore import Qt, QDateTime, QDate  # For alignment and other flags
 from PySide6.QtGui import QCursor  # For tooltips.
 from PySide6.QtWidgets import *  # Main GUI components.
 import datetime as dt  # For dates, times, and timezones.
-import pyperclip  # Clipboard functions.
-from typing import cast  # To prevent false red underlines by VS Code.
+from typing import cast  # To prevent false red underlines by code editors.
+
+
+class TimestampDisplay(QWidget):
+    """A QLabel up top, and a horizontally-aligned read-only QLineEdit and QButton.
+
+    The QLabel contains the name and flag of the timestamp type, e.g. "Relative (:R)"
+
+    The QLineEdit will display the generated timestamp for use on Discord.
+
+    The QButton will simply copy the generated timestamp to the clipboard on click."""
+
+    def __init__(self, name: str, flag: str, example: str, initial_timestamp: int):
+        """Create and combine the widgets.
+
+        :param name: Name of timestamp type, like "Relative".
+        :param flag: Flag for the timestamp type, like 'R' for Relative.
+        :param example: Example of timestamp type placed in label, like "in 5 days".
+        """
+
+        super().__init__()
+
+        main_layout = QVBoxLayout()
+        self.setLayout(main_layout)
+
+        self.timestamp_name: str = name
+        self.timestamp_flag: str = flag
+        self.formatted_timestamp: str
+
+        self.label = QLabel(
+            f"<b><u>{self.timestamp_name}</u> Timestamp</b> <i>e.g.</i> <b>{example}</b>"
+        )
+
+        main_layout.addWidget(self.label)
+
+        # Make horizontal layout for text box and copy button.
+        sub_layout = QHBoxLayout()
+
+        self.display_box = QLineEdit(readOnly=True)
+        sub_layout.addWidget(self.display_box)
+
+        self.copy_button = QPushButton("Copy")
+        self.copy_button.clicked.connect(self.on_copy_clicked)
+        sub_layout.addWidget(self.copy_button)
+
+        main_layout.addLayout(sub_layout)
+
+        self.display_new_timestamp(initial_timestamp)
+
+    def display_new_timestamp(self, timestamp: int):
+        ## IDEA:
+        ## find timestamp from datetime if needed, or skip straight to timestamp.
+        ## update label and display
+        ## HURDLE: previews in labels can't be updated easily.
+        ## -> solution1 = DON'T use this class and instead code each layout individually.
+        ## -> solution2 = use this class but add an "overwrite label" method that does just that, and have the logic for the labels OUTSIDE this class. but then in that case why not use solution1?
+
+        self.formatted_timestamp = (
+            f"<t:{timestamp}:{self.timestamp_flag}>"
+            if len(self.timestamp_flag) > 0
+            else f"<t:{timestamp}>"
+        )
+
+        self.display_box.setText(self.formatted_timestamp)
+
+    def on_copy_clicked(self):
+        """Copies the Discord-ready timestamp to clipboard, if it exists.
+        If it doesn't exist, nothing happens."""
+        if self.formatted_timestamp is not None:
+            QApplication.clipboard().setText(self.formatted_timestamp)
+            print("Copied!")
 
 
 # QWidget used as QMainWindow's features are unnecessary for this app.
 class TimestamperUI(QWidget):
     DEFAULT_MIN_DATE = QDate(1970, 1, 1)
+    # FORMAT: (name, flag, example)
+    TIMESTAMP_TYPES = (
+        ("Relative", "R", "in 5 days"),
+        ("Default", "", "June 2, 2026 at 6:25 PM"),
+    )  # Maybe turn this into a dictionary of dictionaries, like {"Relative": {"name" : "Relative", ...}, ...}
 
     def __init__(self):
         super().__init__()
@@ -29,64 +103,78 @@ class TimestamperUI(QWidget):
 
         # .astimezone(), when called without args, gives a datetime object with
         # the computer's local timezone.
-        now = dt.datetime.now().astimezone()
+        # (Remove seconds since the QDateTimeEdit widget doesn't support seconds.)
+        now = dt.datetime.now().astimezone().replace(second=0, microsecond=0)
 
-        # Let seconds be 0 since the QDateTimeEdit widget doesn't support seconds.
+        # Let seconds be 0
         now_as_QDateTime = QDateTime(
-            now.year, now.month, now.day, now.hour, now.minute, 0
+            now.year, now.month, now.day, now.hour, now.minute, now.second
         )
 
         self.local_utc_offset = now.utcoffset()
 
+        self.timestamp_displays = []
+
         ### Create Widgets ###
 
-        # Date/time selector widget, default to current date/time.
+        # Date/time setter label
+
+        date_selector_label = QLabel("Select the date/time to convert below.")
+
+        # NOTE: Alignment flags are 1-digit binary ints, so a bitwise OR (|) combines flags.
+        date_selector_label.setAlignment(
+            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter
+        )
+        main_layout.addWidget(date_selector_label)
+
+        # Date/time selector widget, defaults to current date/time.
         self.datetime_edit = QDateTimeEdit(
             now_as_QDateTime,
             minimumDate=TimestamperUI.DEFAULT_MIN_DATE,
         )
         self.datetime_edit.setCalendarPopup(True)
-
-        # Copy to Clipboard button
-        self.copy_button = QPushButton("Copy to Clipboard")
-        self.copy_button.clicked.connect(self.on_copy_to_clipboard_clicked)
+        main_layout.addWidget(
+            self.datetime_edit, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
 
         # Timezone dropdown label
         timezone_dropdown_label = QLabel(
-            "Select a timezone below. You're OS's timezone is automatically selected at launch."
+            "Select a timezone below.\n(Your OS's timezone is automatically selected at launch.)"
         )
         timezone_dropdown_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        main_layout.addWidget(timezone_dropdown_label)
 
         # Timezone dropdown
         self.timezone_dropdown = QComboBox()
         self.timezone_dropdown.addItems(self.generate_utc_offset_strings())
-
         # Set selected timezone to local timezone.
         if self.local_utc_offset is not None:
             local_timezone = dt.timezone(self.local_utc_offset)
             self.timezone_dropdown.setCurrentText(f"{local_timezone}")
 
-        # Checkboxes
-
-        checkbox_layout = QHBoxLayout()
-
-        self.checkbox1 = QCheckBox("Check box1?")
-        self.checkbox2 = QCheckBox("Check box2?")
-
-        checkbox_layout.addWidget(self.checkbox1)
-        checkbox_layout.addWidget(self.checkbox2)
-
-        ### Place widgets on main layout ###
-        main_layout.addWidget(
-            self.datetime_edit, alignment=Qt.AlignmentFlag.AlignHCenter
-        )
-        main_layout.addWidget(timezone_dropdown_label)
         main_layout.addWidget(self.timezone_dropdown)
-        main_layout.addWidget(self.copy_button)
 
-        main_layout.addLayout(checkbox_layout)
+        # Timestamp displays
+        timestamp_layout = QVBoxLayout()
+
+        current_ts = int(now.timestamp())
+
+        for name, flag, example in TimestamperUI.TIMESTAMP_TYPES:
+            new_ts_display = TimestampDisplay(
+                name=name,
+                flag=flag,
+                example=example,
+                initial_timestamp=current_ts,
+            )
+
+            timestamp_layout.addWidget(new_ts_display)
+
+            self.timestamp_displays.append(new_ts_display)
+
+        main_layout.addLayout(timestamp_layout)
 
     ### Helpers ###
+
     def generate_utc_offset_strings(self) -> list[str]:
         """Returns a list of all possible UTC offsets (in 15 minute increments)."""
 
@@ -108,7 +196,8 @@ class TimestamperUI(QWidget):
         return offset_strings
 
     ### "Slots", the event handling methods ###
-    def on_copy_to_clipboard_clicked(self):
+
+    def on_copy_to_clipboard_clicked(self):  # To be deleted.
         """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
 
         # cast() used here to remove the red underline in code editors.
@@ -128,7 +217,7 @@ class TimestamperUI(QWidget):
             f'"{chosen_date_time}" has a Relative Discord timestamp of: {formatted_timestamp}\nCopying to clipboard...'
         )
 
-        pyperclip.copy(formatted_timestamp)
+        # pyperclip.copy(formatted_timestamp)
 
         print("Copied!")
 
@@ -152,3 +241,5 @@ if __name__ == "__main__":
 ##### IDEAS (arbitrarily numbered) #####
 # 1. Add option to override minimum date of jan 1 1970.
 # 2. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
+# 3. EITHER: On change of the DateTimeEdit, run the display_new_timestamp() method for each timestamp display,
+#    OR: Add a dedicated button "Generate Timestamps" for this purpose.
