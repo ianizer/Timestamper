@@ -36,6 +36,7 @@ class TimestampDisplay(QWidget):
         self.label = QLabel(
             f"<b><u>{self.timestamp_name}</u> Timestamp</b> <i>e.g.</i> <b>{example}</b>"
         )
+        self.label.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
         main_layout.addWidget(self.label)
 
@@ -54,12 +55,7 @@ class TimestampDisplay(QWidget):
         self.display_new_timestamp(initial_timestamp)
 
     def display_new_timestamp(self, timestamp: int):
-        ## IDEA:
-        ## find timestamp from datetime if needed, or skip straight to timestamp.
-        ## update label and display
-        ## HURDLE: previews in labels can't be updated easily.
-        ## -> solution1 = DON'T use this class and instead code each layout individually.
-        ## -> solution2 = use this class but add an "overwrite label" method that does just that, and have the logic for the labels OUTSIDE this class. but then in that case why not use solution1?
+        """Displays the given timestamp in the display box."""
 
         self.formatted_timestamp = (
             f"<t:{timestamp}:{self.timestamp_flag}>"
@@ -72,6 +68,7 @@ class TimestampDisplay(QWidget):
     def on_copy_clicked(self):
         """Copies the Discord-ready timestamp to clipboard, if it exists.
         If it doesn't exist, nothing happens."""
+
         if self.formatted_timestamp is not None:
             QApplication.clipboard().setText(self.formatted_timestamp)
             print("Copied!")
@@ -79,12 +76,16 @@ class TimestampDisplay(QWidget):
 
 # QWidget used as QMainWindow's features are unnecessary for this app.
 class TimestamperUI(QWidget):
+    """Main GUI."""
+
     DEFAULT_MIN_DATE = QDate(1970, 1, 1)
-    # FORMAT: (name, flag, example)
+    STANDARD_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss AP"
+    MILITARY_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss"
+    # TIMESTAMP_TYPES FORMAT: ((name, flag, example),)
     TIMESTAMP_TYPES = (
         ("Relative", "R", "in 5 days"),
         ("Default", "", "June 2, 2026 at 6:25 PM"),
-    )  # Maybe turn this into a dictionary of dictionaries, like {"Relative": {"name" : "Relative", ...}, ...}
+    )  # Maybe turn this into a tuple of dictionaries, like ({"name" : "Relative", ...}, ...)
 
     def __init__(self):
         super().__init__()
@@ -94,7 +95,6 @@ class TimestamperUI(QWidget):
         """Builds UI and initializes properties."""
 
         self.setWindowTitle("Timestamper")
-        self.setMinimumSize(300, 300)
 
         main_layout = QVBoxLayout()
         self.setLayout(main_layout)
@@ -103,7 +103,7 @@ class TimestamperUI(QWidget):
 
         # .astimezone(), when called without args, gives a datetime object with
         # the computer's local timezone.
-        # (Remove seconds since the QDateTimeEdit widget doesn't support seconds.)
+        # (Remove seconds since QDateTimeEdit doesn't support seconds.)
         now = dt.datetime.now().astimezone().replace(second=0, microsecond=0)
 
         # Let seconds be 0
@@ -119,7 +119,9 @@ class TimestamperUI(QWidget):
 
         # Date/time setter label
 
-        date_selector_label = QLabel("Select the date/time to convert below.")
+        date_selector_label = QLabel(
+            "Select the date/time to convert below (YYYY-MM-DD)."
+        )
 
         # NOTE: Alignment flags are 1-digit binary ints, so a bitwise OR (|) combines flags.
         date_selector_label.setAlignment(
@@ -128,14 +130,24 @@ class TimestamperUI(QWidget):
         main_layout.addWidget(date_selector_label)
 
         # Date/time selector widget, defaults to current date/time.
+        dt_layout = QHBoxLayout()
+
         self.datetime_edit = QDateTimeEdit(
             now_as_QDateTime,
-            minimumDate=TimestamperUI.DEFAULT_MIN_DATE,
+            minimumDate=self.DEFAULT_MIN_DATE,
         )
         self.datetime_edit.setCalendarPopup(True)
-        main_layout.addWidget(
-            self.datetime_edit, alignment=Qt.AlignmentFlag.AlignHCenter
-        )
+        self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
+
+        dt_layout.addWidget(self.datetime_edit, alignment=Qt.AlignmentFlag.AlignRight)
+
+        # Checkbox for using 24-hour time.
+        self.use_military_time_cb = QCheckBox("Use military (24-hour) time?")
+        self.use_military_time_cb.checkStateChanged.connect(self.on_military_time_cb_changed)
+
+        dt_layout.addWidget(self.use_military_time_cb, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        main_layout.addLayout(dt_layout)
 
         # Timezone dropdown label
         timezone_dropdown_label = QLabel(
@@ -154,12 +166,14 @@ class TimestamperUI(QWidget):
 
         main_layout.addWidget(self.timezone_dropdown)
 
+        # Generate timestamp button
+
         # Timestamp displays
         timestamp_layout = QVBoxLayout()
 
         current_ts = int(now.timestamp())
 
-        for name, flag, example in TimestamperUI.TIMESTAMP_TYPES:
+        for name, flag, example in self.TIMESTAMP_TYPES:
             new_ts_display = TimestampDisplay(
                 name=name,
                 flag=flag,
@@ -172,6 +186,9 @@ class TimestamperUI(QWidget):
             self.timestamp_displays.append(new_ts_display)
 
         main_layout.addLayout(timestamp_layout)
+
+        self.adjustSize()  # Set min size dynamically after widgets placed.
+        self.setMinimumSize(self.size())
 
     ### Helpers ###
 
@@ -196,6 +213,12 @@ class TimestamperUI(QWidget):
         return offset_strings
 
     ### "Slots", the event handling methods ###
+
+    def on_military_time_cb_changed(self):
+        if self.use_military_time_cb.isChecked():
+            self.datetime_edit.setDisplayFormat(self.MILITARY_TIME_FORMAT)
+        else:
+            self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
 
     def on_copy_to_clipboard_clicked(self):  # To be deleted.
         """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
