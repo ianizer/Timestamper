@@ -102,7 +102,7 @@ class TimestamperUI(QWidget):
 
         # .astimezone(), when called without args, gives a datetime object with
         # the computer's local timezone.
-        # (Remove seconds since QDateTimeEdit doesn't support seconds.)
+        # (Remove seconds for cleanliness)
         now = dt.datetime.now().astimezone().replace(second=0, microsecond=0)
 
         # Let seconds be 0
@@ -175,6 +175,7 @@ class TimestamperUI(QWidget):
         # Timezone dropdown
         self.timezone_dropdown = QComboBox()
         self.timezone_dropdown.addItems(self.generate_utc_offset_strings())
+        self.timezone_dropdown.currentTextChanged.connect(self.on_timezone_change)
         # Set selected timezone to local timezone.
         if self.local_utc_offset is not None:
             local_timezone = dt.timezone(self.local_utc_offset)
@@ -254,6 +255,9 @@ class TimestamperUI(QWidget):
             self.datetime_edit.setDisplayFormat(self.MILITARY_TIME_FORMAT)
         else:
             self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
+
+    def on_timezone_change(self):
+        self.on_generate_timestamp_clicked()
 
     def on_generate_timestamp_clicked(self):
         """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
