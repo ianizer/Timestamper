@@ -33,7 +33,7 @@ class TimestampDisplay(QWidget):
         self.formatted_timestamp: str
 
         self.label = QLabel(
-            f"<b><u>{self.timestamp_name}</u> Timestamp</b> <i>e.g.</i> <b>{example}</b>"
+            f"<b><u>{self.timestamp_name}</u></b> <i>e.g.</i> <b>{example}</b>"
         )
         self.label.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
@@ -77,13 +77,20 @@ class TimestampDisplay(QWidget):
 class TimestamperUI(QWidget):
     """Main GUI."""
 
-    DEFAULT_MIN_DATE = QDate(1970, 1, 1)
     STANDARD_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss AP"
     MILITARY_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss"
     # TIMESTAMP_TYPES FORMAT: ((name, flag, example),)
     TIMESTAMP_TYPES = (
-        ("Relative", "R", "in 5 days"),
-        ("Default", "", "June 2, 2026 at 6:25 PM"),
+        ("Default", "", "March 9, 2026 at 3:15 PM"),
+        ("Relative Time", "R", "in 5 days"),
+        ("Short Time", "t", "3:15 PM"),
+        ("Medium Time", "T", "3:15:00 PM"),
+        ("Short Date", "d", "3/9/2026"),
+        ("Long Date", "D", "March 9, 2026"),
+        ("Long Date, Short Time", "f", "March 9, 2026 at 3:15 PM"),
+        ("Full Date, Short Time", "F", "Monday, March 9, 2026 at 3:15 PM"),
+        ("Short Date, Short Time", "s", "3/9/2026, 3:15 PM"),
+        ("Short Date, Medium Time", "S", "3/9/2026, 3:15:00 PM"),
     )  # Maybe turn this into a tuple of dictionaries, like ({"name" : "Relative", ...}, ...)
 
     def __init__(self):
@@ -129,19 +136,20 @@ class TimestamperUI(QWidget):
         main_layout.addWidget(date_selector_label)
 
         # Date/time selector widget, defaults to current date/time.
+
         dt_layout = QHBoxLayout()
 
-        self.datetime_edit = QDateTimeEdit(
-            now_as_QDateTime,
-            minimumDate=self.DEFAULT_MIN_DATE,
-        )
+        self.datetime_edit = QDateTimeEdit(now_as_QDateTime)
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
 
         dt_layout.addWidget(self.datetime_edit, alignment=Qt.AlignmentFlag.AlignRight)
 
         # Checkbox for using 24-hour time.
-        self.use_military_time_cb = QCheckBox("Use military (24-hour) time?")
+
+        self.use_military_time_cb = QCheckBox(
+            "Use military (24-hour) time?\n(does not affect timestamps)"
+        )  # IDEA: Italicize "(does not affect timestamps)"
         self.use_military_time_cb.checkStateChanged.connect(
             self.on_military_time_cb_changed
         )
@@ -153,6 +161,7 @@ class TimestamperUI(QWidget):
         main_layout.addLayout(dt_layout)
 
         # Generate timestamp button
+
         self.generate_timestamp_button = QPushButton("Generate Timestamps")
         self.generate_timestamp_button.clicked.connect(
             self.on_generate_timestamp_clicked
@@ -166,6 +175,7 @@ class TimestamperUI(QWidget):
         )
 
         # Timezone dropdown label
+
         timezone_dropdown_label = QLabel(
             "<b>Select a timezone below.</b>\n<i>(Your OS's timezone is automatically selected at launch.)</i>"
         )
@@ -173,9 +183,11 @@ class TimestamperUI(QWidget):
         main_layout.addWidget(timezone_dropdown_label)
 
         # Timezone dropdown
+
         self.timezone_dropdown = QComboBox()
         self.timezone_dropdown.addItems(self.generate_utc_offset_strings())
         self.timezone_dropdown.currentTextChanged.connect(self.on_timezone_change)
+
         # Set selected timezone to local timezone.
         if self.local_utc_offset is not None:
             local_timezone = dt.timezone(self.local_utc_offset)
@@ -184,11 +196,18 @@ class TimestamperUI(QWidget):
         main_layout.addWidget(self.timezone_dropdown)
 
         # Timestamp displays
-        timestamp_layout = QVBoxLayout()
+
+        DISPLAYS_PER_ROW = 2
+        timestamp_layout = QGridLayout()
 
         current_ts = int(now.timestamp())
+        current_row, current_column = 0, 0
 
         for name, flag, example in self.TIMESTAMP_TYPES:
+            if len(self.timestamp_displays) % DISPLAYS_PER_ROW == 0:
+                current_row += 1
+                current_column = 0
+
             new_ts_display = TimestampDisplay(
                 name=name,
                 flag=flag,
@@ -196,7 +215,8 @@ class TimestamperUI(QWidget):
                 initial_timestamp=current_ts,
             )
 
-            timestamp_layout.addWidget(new_ts_display)
+            timestamp_layout.addWidget(new_ts_display, current_row, current_column)
+            current_column += 1
 
             self.timestamp_displays.append(new_ts_display)
 
@@ -269,7 +289,6 @@ class TimestamperUI(QWidget):
             dt.datetime, self.datetime_edit.dateTime().toPython()
         ).replace(tzinfo=self.get_selected_timezone())
 
-        # int() used to remove fractional part of timestamp.
         epoch = dt.datetime(
             year=1970,
             month=1,
@@ -280,6 +299,9 @@ class TimestamperUI(QWidget):
             microsecond=0,
             tzinfo=dt.UTC,
         )
+
+        # int() used to remove fractional part of timestamp.
+        # Manual subtraction to allow for negative timestamp generation on Windows
         unix_timestamp = int((chosen_date_time - epoch).total_seconds())
 
         for display in self.timestamp_displays:
@@ -303,6 +325,6 @@ if __name__ == "__main__":
 
 
 ##### IDEAS (arbitrarily numbered) #####
-# 1. Add option to override minimum date of jan 1 1970.
-# 2. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
-# 3. Make "Generate Timestamps" button glow or have an outline or something like that when there is a change to the datetime_edit or timezone dropdown selection.
+# 1. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
+# 2. Make "Generate Timestamps" button glow or have an outline or something like that when there is a change to the datetime_edit or timezone dropdown selection.
+# 3. Split timestamp displays into two columns (place two boxes on same row).
