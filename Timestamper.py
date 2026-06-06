@@ -143,6 +143,8 @@ class TimestamperUI(QWidget):
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
 
+        self.datetime_edit.dateTimeChanged.connect(self.generate_timestamps)
+
         dt_layout.addWidget(self.datetime_edit, alignment=Qt.AlignmentFlag.AlignRight)
 
         # Checkbox for using 24-hour time.
@@ -159,20 +161,6 @@ class TimestamperUI(QWidget):
         )
 
         main_layout.addLayout(dt_layout)
-
-        # Generate timestamp button
-
-        self.generate_timestamp_button = QPushButton("Generate Timestamps")
-        self.generate_timestamp_button.clicked.connect(
-            self.on_generate_timestamp_clicked
-        )
-        self.generate_timestamp_button.setMinimumSize(
-            300, 50
-        )  # TODO: Make it look better.
-
-        main_layout.addWidget(
-            self.generate_timestamp_button, alignment=Qt.AlignmentFlag.AlignHCenter
-        )
 
         # Timezone dropdown label
 
@@ -249,6 +237,8 @@ class TimestamperUI(QWidget):
 
     def get_selected_timezone(self) -> dt.timezone:
         """Returns the timezone selected from the timezone combobox."""
+        # NOTE: This function is fragile.
+        # If the format of the UTC offset changes one day, this will break.
 
         selected_timezone_str: str = self.timezone_dropdown.currentText()
         selected_timezone_str = (
@@ -259,6 +249,10 @@ class TimestamperUI(QWidget):
 
         selected_tz_hours: int = int(split_timezone_str[0])
         selected_tz_minutes: int = int(split_timezone_str[1])
+
+        # If in a negative timezone, make minutes negative as well.
+        if "-" in selected_timezone_str:
+            selected_tz_minutes = -selected_tz_minutes
 
         selected_timezone: dt.timezone = dt.timezone(
             dt.timedelta(hours=selected_tz_hours, minutes=selected_tz_minutes)
@@ -276,11 +270,14 @@ class TimestamperUI(QWidget):
         else:
             self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
 
-    def on_timezone_change(self):
-        self.on_generate_timestamp_clicked()
+    def on_datetime_changed(self):
+        self.generate_timestamps()
 
-    def on_generate_timestamp_clicked(self):
-        """Creates a Discord timestamp based on the selected mode, date, and time, and copies it to the clipboard."""
+    def on_timezone_change(self):
+        self.generate_timestamps()
+
+    def generate_timestamps(self):
+        """Computes the Unix timestamp for the selected date and time and updates the timestamp displays."""
 
         # cast() used here to remove the red underline in code editors.
         # (Because .toPython()'s type hints return type "Object", not datetime,
@@ -301,7 +298,7 @@ class TimestamperUI(QWidget):
         )
 
         # int() used to remove fractional part of timestamp.
-        # Manual subtraction to allow for negative timestamp generation on Windows
+        # Manual subtraction to allow for negative timestamp generation on Windows.
         unix_timestamp = int((chosen_date_time - epoch).total_seconds())
 
         for display in self.timestamp_displays:
