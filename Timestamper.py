@@ -126,7 +126,7 @@ class TimestamperUI(QWidget):
         # Date/time setter label
 
         date_selector_label = QLabel(
-            "<b>Select the date/time to convert below</b> <i>(YYYY-MM-DD)</i>."
+            "<b>Select the date/time to convert below</b> <i>(YYYY-MM-DD)</i>. Click the arrow for a calendar."
         )
 
         # NOTE: Alignment flags are 1-digit binary ints, so a bitwise OR (|) combines flags.
@@ -142,6 +142,8 @@ class TimestamperUI(QWidget):
         self.datetime_edit = QDateTimeEdit(now_as_QDateTime)
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
+        # Set to minimum time possible with QDateTimeEdit
+        self.datetime_edit.setMinimumDateTime(QDateTime(100, 1, 1, 0, 0, 0))
 
         self.datetime_edit.dateTimeChanged.connect(self.generate_timestamps)
 
@@ -325,3 +327,4 @@ if __name__ == "__main__":
 # 1. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
 # 2. Make "Generate Timestamps" button glow or have an outline or something like that when there is a change to the datetime_edit or timezone dropdown selection.
 # 3. Split timestamp displays into two columns (place two boxes on same row).
+# 4. Make displays dynamic i.e. actual display what current timestamp will look like on discord rather than a static example.
