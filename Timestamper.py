@@ -1,7 +1,18 @@
 import sys  # To give exit codes.
-from PySide6.QtCore import Qt, QDateTime, QDate  # For alignment and other flags.
-from PySide6.QtGui import QCursor  # For tooltips.
-from PySide6.QtWidgets import *  # Main GUI components.
+from PySide6.QtCore import Qt, QDateTime  # For alignment and other flags.
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDateTimeEdit,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)  # Main GUI components.
 import datetime as dt  # For dates, times, and timezones.
 from typing import cast  # To prevent false red underlines by code editors.
 
@@ -77,8 +88,8 @@ class TimestampDisplay(QWidget):
 class TimestamperUI(QWidget):
     """Main GUI."""
 
-    STANDARD_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss AP"
-    MILITARY_TIME_FORMAT = "yyyy-MM-dd hh:mm:ss"
+    STANDARD_TIME_FORMAT = "yyyy-MM-dd, h:mm:ss AP"
+    MILITARY_TIME_FORMAT = "yyyy-MM-dd, HH:mm:ss"
     # TIMESTAMP_TYPES FORMAT: ((name, flag, example),)
     TIMESTAMP_TYPES = (
         ("Default", "", "March 9, 2026 at 3:15 PM"),
@@ -92,6 +103,9 @@ class TimestamperUI(QWidget):
         ("Short Date, Short Time", "s", "3/9/2026, 3:15 PM"),
         ("Short Date, Medium Time", "S", "3/9/2026, 3:15:00 PM"),
     )  # Maybe turn this into a tuple of dictionaries, like ({"name" : "Relative", ...}, ...)
+    DISPLAYS_PER_ROW = 2
+    # Displayed in the timezone combobox, but only for the local timezone.
+    LOCAL_TZ_STRING = " (local timezone)"  # (include preceding space)
 
     def __init__(self):
         super().__init__()
@@ -117,7 +131,10 @@ class TimestamperUI(QWidget):
             now.year, now.month, now.day, now.hour, now.minute, now.second
         )
 
-        self.local_utc_offset = now.utcoffset()
+        # Due to adding the timezone with the .astimezone() call above,
+        # now.utcoffset() is guaranteed not to be None.
+        # cast() used to please VS Code.
+        self.local_utc_offset: dt.timedelta = cast(dt.timedelta, now.utcoffset())
 
         self.timestamp_displays: list[TimestampDisplay] = []
 
@@ -142,7 +159,7 @@ class TimestamperUI(QWidget):
         self.datetime_edit = QDateTimeEdit(now_as_QDateTime)
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
-        # Set to minimum time possible with QDateTimeEdit
+        # Set min time to earliest possible with QDateTimeEdit
         self.datetime_edit.setMinimumDateTime(QDateTime(100, 1, 1, 0, 0, 0))
 
         self.datetime_edit.dateTimeChanged.connect(self.generate_timestamps)
@@ -175,26 +192,26 @@ class TimestamperUI(QWidget):
         # Timezone dropdown
 
         self.timezone_dropdown = QComboBox()
-        self.timezone_dropdown.addItems(self.generate_utc_offset_strings())
+        self.timezone_dropdown.addItems(
+            self.generate_utc_offset_strings(dt.timezone(self.local_utc_offset))
+        )
         self.timezone_dropdown.currentTextChanged.connect(self.on_timezone_change)
 
         # Set selected timezone to local timezone.
-        if self.local_utc_offset is not None:
-            local_timezone = dt.timezone(self.local_utc_offset)
-            self.timezone_dropdown.setCurrentText(f"{local_timezone}")
+        local_timezone = dt.timezone(self.local_utc_offset)
+        self.timezone_dropdown.setCurrentText(f"{local_timezone}{self.LOCAL_TZ_STRING}")
 
         main_layout.addWidget(self.timezone_dropdown)
 
         # Timestamp displays
 
-        DISPLAYS_PER_ROW = 2
         timestamp_layout = QGridLayout()
 
         current_ts = int(now.timestamp())
         current_row, current_column = 0, 0
 
         for name, flag, example in self.TIMESTAMP_TYPES:
-            if len(self.timestamp_displays) % DISPLAYS_PER_ROW == 0:
+            if len(self.timestamp_displays) % self.DISPLAYS_PER_ROW == 0:
                 current_row += 1
                 current_column = 0
 
@@ -217,7 +234,7 @@ class TimestamperUI(QWidget):
 
     ### Helpers ###
 
-    def generate_utc_offset_strings(self) -> list[str]:
+    def generate_utc_offset_strings(self, local_time_zone=dt.UTC) -> list[str]:
         """Returns a list of all possible UTC offsets (in 15 minute increments)."""
 
         offset_strings = []
@@ -226,14 +243,21 @@ class TimestamperUI(QWidget):
         min_minutes = -12 * 60  # UTC-12:00
         max_minutes = 14 * 60  # UTC+14:00
 
-        # timedelta/timezone used so that strings will match datetime objects exactly
-        # (even if the format changes one day).
-        for current_minutes in range(min_minutes, max_minutes + 15, 15):
+        # Start at most positive UTC offset, end at most negative offset
+        # so that higher offsets appear above lower ones in the combobox.
+        for current_minutes in range(max_minutes, min_minutes - 15, -15):
+            # timedelta/timezone used so that strings will match datetime objects exactly
+            # (even if the format changes one day).
             current_timedelta = dt.timedelta(minutes=current_minutes)
 
             # Make timezone object to get the form "UTC±HH:MM"
             timezone_from_delta = dt.timezone(current_timedelta)
-            offset_strings.append(str(timezone_from_delta))
+
+            # Insert at beginning to place negative offsets before positive ones.
+            if timezone_from_delta == local_time_zone:
+                offset_strings.append(str(timezone_from_delta) + self.LOCAL_TZ_STRING)
+            else:
+                offset_strings.append(str(timezone_from_delta))
 
         return offset_strings
 
@@ -242,15 +266,21 @@ class TimestamperUI(QWidget):
         # NOTE: This function is fragile.
         # If the format of the UTC offset changes one day, this will break.
 
-        selected_timezone_str: str = self.timezone_dropdown.currentText()
+        # Get UTC offset string from combobox,
+        # removing the "your timezone" message if present.
+        selected_timezone_str: str = self.timezone_dropdown.currentText().replace(
+            self.LOCAL_TZ_STRING, ""
+        )
+
+        # Remove the "UTC" from the combobox string, adding "00:00" if timezone is UTC.
         selected_timezone_str = (
             "00:00" if selected_timezone_str == "UTC" else selected_timezone_str[3:]
         )
 
         split_timezone_str: list = selected_timezone_str.split(":")
 
-        selected_tz_hours: int = int(split_timezone_str[0])
-        selected_tz_minutes: int = int(split_timezone_str[1])
+        selected_tz_hours = int(split_timezone_str[0])
+        selected_tz_minutes = int(split_timezone_str[1])
 
         # If in a negative timezone, make minutes negative as well.
         if "-" in selected_timezone_str:
@@ -284,7 +314,7 @@ class TimestamperUI(QWidget):
         # cast() used here to remove the red underline in code editors.
         # (Because .toPython()'s type hints return type "Object", not datetime,
         # even though it *is* a datetime object.)
-        chosen_date_time: dt.datetime = cast(
+        chosen_date_time = cast(
             dt.datetime, self.datetime_edit.dateTime().toPython()
         ).replace(tzinfo=self.get_selected_timezone())
 
@@ -319,12 +349,7 @@ if __name__ == "__main__":
     sys.exit(app.exec())
 
 
-##### NOTES #####
-# for hotkeys use QKeySequenceEdit()
-
-
-##### IDEAS (arbitrarily numbered) #####
-# 1. Add a "Reset timezone" button that resets the timezone choice to the local/OS timezone.
-# 2. Make "Generate Timestamps" button glow or have an outline or something like that when there is a change to the datetime_edit or timezone dropdown selection.
-# 3. Split timestamp displays into two columns (place two boxes on same row).
-# 4. Make displays dynamic i.e. actual display what current timestamp will look like on discord rather than a static example.
+##### V2 IDEAS (arbitrarily numbered) #####
+# 1. Make displays dynamic i.e. actual display what current timestamp will look like on discord rather than a static example.
+# 2. Add tooltip to date/time selector that says how to use it.
+# 3. Create a custom date/time selection widget to get past the year 100 and year 9999 limitations.
