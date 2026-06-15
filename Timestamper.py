@@ -37,6 +37,9 @@ class TimestampDisplay(QWidget):
         super().__init__()
 
         main_layout = QVBoxLayout()
+        # Set margins to 0's for more control outside this class.
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(5)
         self.setLayout(main_layout)
 
         self.timestamp_name: str = name
@@ -44,27 +47,32 @@ class TimestampDisplay(QWidget):
         self.formatted_timestamp: str
 
         self.label = QLabel(
-            f"<b><u>{self.timestamp_name}</u></b> <i>e.g.</i> <b>{example}</b>"
+            f"<b>{self.timestamp_name}</b><br><i>(example: {example})</i>",
+            alignment=Qt.AlignmentFlag.AlignBottom,
         )
-        self.label.setAlignment(Qt.AlignmentFlag.AlignBottom)
 
         main_layout.addWidget(self.label)
 
         # Make horizontal layout for text box and copy button.
         sub_layout = QHBoxLayout()
+        sub_layout.setSpacing(5)
+        sub_layout.setContentsMargins(0, 0, 0, 0)
 
         self.display_box = QLineEdit(readOnly=True)
+        self.display_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.display_box.setMinimumHeight(30)
         sub_layout.addWidget(self.display_box)
 
         self.copy_button = QPushButton("Copy")
+        self.copy_button.setMinimumHeight(30)
         self.copy_button.clicked.connect(self.on_copy_clicked)
         sub_layout.addWidget(self.copy_button)
 
         main_layout.addLayout(sub_layout)
 
-        self.display_new_timestamp(initial_timestamp)
+        self.display_timestamp(initial_timestamp)
 
-    def display_new_timestamp(self, timestamp: int):
+    def display_timestamp(self, timestamp: int):
         """Displays the given timestamp in the display box."""
 
         self.formatted_timestamp = (
@@ -106,6 +114,7 @@ class TimestamperUI(QWidget):
     DISPLAYS_PER_ROW = 2
     # Displayed in the timezone combobox, but only for the local timezone.
     LOCAL_TZ_STRING = " (local timezone)"  # (include preceding space)
+    DEFAULT_SPACING = 5
 
     def __init__(self):
         super().__init__()
@@ -115,8 +124,12 @@ class TimestamperUI(QWidget):
         """Builds UI and initializes properties."""
 
         self.setWindowTitle("Timestamper")
+        self.setFont("Verdana")
+        default_font = self.font()
 
         main_layout = QVBoxLayout()
+        main_layout.setSpacing(30)
+        main_layout.setContentsMargins(10, 10, 10, 10)
         self.setLayout(main_layout)
 
         ### Properties and frequently-used local variables ###
@@ -126,7 +139,6 @@ class TimestamperUI(QWidget):
         # (Remove seconds for cleanliness)
         now = dt.datetime.now().astimezone().replace(second=0, microsecond=0)
 
-        # Let seconds be 0
         now_as_QDateTime = QDateTime(
             now.year, now.month, now.day, now.hour, now.minute, now.second
         )
@@ -140,31 +152,81 @@ class TimestamperUI(QWidget):
 
         ### Create Widgets ###
 
+        # Welcome label
+        welcome_label = QLabel(
+            "<b>Welcome to Timestamper!</b><br>Choose a date, time, and timezone, and the timestamps will instantly appear!",
+            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
+        )
+
+        main_layout.addWidget(welcome_label)
+
+        # Timezone section
+
+        tz_layout = QVBoxLayout()
+        tz_layout.setSpacing(self.DEFAULT_SPACING)
+
+        # Timezone label
+        timezone_dropdown_label = QLabel(
+            "<b>Select a timezone below.</b><br><i>(Your OS's timezone is automatically selected at launch.)</i>",
+            alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+        )
+
+        tz_layout.addWidget(timezone_dropdown_label)
+
+        # Timezone dropdown
+
+        self.timezone_dropdown = QComboBox()
+        self.timezone_dropdown.setMinimumHeight(30)
+        self.timezone_dropdown.addItems(
+            self.generate_utc_offset_strings(dt.timezone(self.local_utc_offset))
+        )
+        # Set selected timezone to local timezone.
+        local_timezone = dt.timezone(self.local_utc_offset)
+        self.timezone_dropdown.setCurrentText(f"{local_timezone}{self.LOCAL_TZ_STRING}")
+
+        self.timezone_dropdown.currentTextChanged.connect(self.on_timezone_change)
+
+        tz_layout.addWidget(
+            self.timezone_dropdown, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
+
+        main_layout.addLayout(tz_layout)
+
+        # Date/time selector section
+        dt_VBox_layout = QVBoxLayout()
+        dt_VBox_layout.setSpacing(self.DEFAULT_SPACING)
+        dt_HBox_layout = QHBoxLayout()
+
         # Date/time setter label
 
-        date_selector_label = QLabel(
-            "<b>Select the date/time to convert below</b> <i>(YYYY-MM-DD)</i>. Click the arrow for a calendar."
-        )
-
         # NOTE: Alignment flags are 1-digit binary ints, so a bitwise OR (|) combines flags.
-        date_selector_label.setAlignment(
-            Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter
+        date_selector_label = QLabel(
+            "<b>Select the date/time to convert below</b> <i>(YYYY-MM-DD)</i>. <u>Click the arrow for a calendar.</u>",
+            alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
         )
-        main_layout.addWidget(date_selector_label)
 
-        # Date/time selector widget, defaults to current date/time.
+        dt_VBox_layout.addWidget(date_selector_label)
 
-        dt_layout = QHBoxLayout()
+        # Date/time selector widget, defaults to current date/time (now).
 
         self.datetime_edit = QDateTimeEdit(now_as_QDateTime)
+        self.datetime_edit.setMinimumHeight(40)
+        # Center date text
+        self.datetime_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.datetime_edit.setCalendarPopup(True)
         self.datetime_edit.setDisplayFormat(self.STANDARD_TIME_FORMAT)
         # Set min time to earliest possible with QDateTimeEdit
         self.datetime_edit.setMinimumDateTime(QDateTime(100, 1, 1, 0, 0, 0))
 
+        datetime_edit_font = default_font
+        datetime_edit_font.setPointSize(default_font.pointSize() + 3)
+        self.datetime_edit.setFont(datetime_edit_font)
+
         self.datetime_edit.dateTimeChanged.connect(self.generate_timestamps)
 
-        dt_layout.addWidget(self.datetime_edit, alignment=Qt.AlignmentFlag.AlignRight)
+        dt_HBox_layout.addWidget(
+            self.datetime_edit, alignment=Qt.AlignmentFlag.AlignRight
+        )
 
         # Checkbox for using 24-hour time.
 
@@ -175,37 +237,22 @@ class TimestamperUI(QWidget):
             self.on_military_time_cb_changed
         )
 
-        dt_layout.addWidget(
+        dt_HBox_layout.addWidget(
             self.use_military_time_cb, alignment=Qt.AlignmentFlag.AlignLeft
         )
 
-        main_layout.addLayout(dt_layout)
+        # Place the horizontally aligned widgets below the label.
+        dt_VBox_layout.addLayout(dt_HBox_layout)
 
-        # Timezone dropdown label
-
-        timezone_dropdown_label = QLabel(
-            "<b>Select a timezone below.</b>\n<i>(Your OS's timezone is automatically selected at launch.)</i>"
-        )
-        timezone_dropdown_label.setAlignment(Qt.AlignmentFlag.AlignBottom)
-        main_layout.addWidget(timezone_dropdown_label)
-
-        # Timezone dropdown
-
-        self.timezone_dropdown = QComboBox()
-        self.timezone_dropdown.addItems(
-            self.generate_utc_offset_strings(dt.timezone(self.local_utc_offset))
-        )
-        self.timezone_dropdown.currentTextChanged.connect(self.on_timezone_change)
-
-        # Set selected timezone to local timezone.
-        local_timezone = dt.timezone(self.local_utc_offset)
-        self.timezone_dropdown.setCurrentText(f"{local_timezone}{self.LOCAL_TZ_STRING}")
-
-        main_layout.addWidget(self.timezone_dropdown)
+        main_layout.addLayout(dt_VBox_layout)
 
         # Timestamp displays
 
         timestamp_layout = QGridLayout()
+        # Add blank space above timestamp displays.
+        timestamp_layout.setContentsMargins(0, 10, 0, 0)
+        timestamp_layout.setHorizontalSpacing(25)
+        timestamp_layout.setVerticalSpacing(25)
 
         current_ts = int(now.timestamp())
         current_row, current_column = 0, 0
@@ -229,8 +276,7 @@ class TimestamperUI(QWidget):
 
         main_layout.addLayout(timestamp_layout)
 
-        self.adjustSize()  # Set min size dynamically after widgets placed.
-        self.setMinimumSize(self.size())
+        self.setMinimumWidth(620)
 
     ### Helpers ###
 
@@ -334,7 +380,7 @@ class TimestamperUI(QWidget):
         unix_timestamp = int((chosen_date_time - epoch).total_seconds())
 
         for display in self.timestamp_displays:
-            display.display_new_timestamp(unix_timestamp)
+            display.display_timestamp(unix_timestamp)
 
 
 # NOTE: This block will only be run if the module (file) is run directly, not imported.
@@ -349,7 +395,9 @@ if __name__ == "__main__":
     sys.exit(app.exec())
 
 
-##### V2 IDEAS (arbitrarily numbered) #####
+##### FUTURE IDEAS (arbitrarily numbered) #####
 # 1. Make displays dynamic i.e. actual display what current timestamp will look like on discord rather than a static example.
 # 2. Add tooltip to date/time selector that says how to use it.
 # 3. Create a custom date/time selection widget to get past the year 100 and year 9999 limitations.
+# 4. "Compact mode" which collapses timestamp displays into one edit box, and you select the type of timestamp to show from a combobox.
+# 5. Perhaps hard-code LESS values (padding, spacing).
