@@ -1,5 +1,6 @@
 import sys  # To give exit codes.
-from PySide6.QtCore import Qt, QDateTime  # For alignment and other flags.
+from PySide6.QtCore import Qt, QDateTime  # Qt for alignment flags and more.
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -15,6 +16,10 @@ from PySide6.QtWidgets import (
 )  # Main GUI components.
 import datetime as dt  # For dates, times, and timezones.
 from typing import cast  # To prevent false red underlines by code editors.
+import base64  # For storing the icon in this single file.
+
+# Generated from a png file. Placed up here so as not to clog up the main class.
+ICON_STRING = b"iVBORw0KGgoAAAANSUhEUgAAAZAAAAGQCAMAAAC3Ycb+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAKOUExURf///2trayAgIAAAABEREQICAvv7++3t7d/f3/z8/NHR0cPDw97e3rW1tc/Pz6enp8DAwJmZmbGxsYuLi6GhoX19fZKSkm9vb4ODg2FhYXR0dFNTU2VlZUVFRVZWVjc3N0dHRxISEigoKDo6Ok1NTV9fX3BwcICAgJGRkWZmZqysrLa2tru7u8XFxcrKys7OzszMzMvLy8jIyEpKSsfHx8bGxsnJyc3Nzbm5ua6urqOjo5iYmI2NjYKCgnd3d1paWjY2NikpKTg4OCMjI1FRUX5+fqurq4mJievr6xsbGzExMX9/f7q6uuzs7D8/Pw0NDRkZGdDQ0PPz8wkJCQ8PD3p6euTk5EtLS9XV1W1tbQUFBY6Ojvj4+O7u7oaGhh4eHkBAQNTU1Ht7e/Hx8fb29ry8vExMTOPj4+fn59nZ2djY2EFBQfLy8v7+/khISPr6+ri4uFBQUHh4eKqqqpycnJubmxgYGODg4IyMjLe3t3Jycm5ubmRkZLS0tF5eXioqKk5OTk9PT6ioqDU1Nb6+vjAwMCwsLCEhIRAQEAQEBOLi4gEBAT09PURERJ2dnXx8fPDw8AgICPf39/X19eHh4WJiYjMzM+bm5tLS0oSEhCUlJbOzsxQUFKSkpJeXl1VVVZSUlI+Pj6CgoIWFhXV1dVJSUmlpaWdnZ5qamllZWR0dHScnJ/T09C8vL3Nzc0lJSXFxcb29vfn5+VRUVOnp6SYmJisrKy0tLVdXV1hYWFtbW1xcXF1dXWBgYIqKimNjY5CQkJOTk5WVlZaWloiIiDIyMhoaGg4ODtfX15+fn0ZGRrKysnl5eUNDQwMDA62trejo6KmpqRcXF8LCwq+vrz4+Pjw8PDk5OS4uLiIiInBd+lMAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAACUxJREFUeF7t3fubVVUdx/GNR1JEVDBQhEAYUTG5XwQFB8IRE9My0wgL1G4yYRllpCYqNAhRhmYFJUJRmUYZOJpW0g27l93rv+lB5pw55wPruGfOWnt/PL5fv6793Xvt9X4egZkzY5YBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANrQkDcGfW1fJ1TeEPS1fZ2oW29P+tq+hurW29Ob9L1t6c7b1En63rZ0523qZH1vV8N0523qFH1xVyfpztvUcH1xV6fqztvUCH1xV6fpztvU6frirs7QnbepkfrirkbpztvUmfrirt6sO29To/XFXY3Rnbeps/TFXZ2tO29TY/XFXZ2jO29T4/TFXY3Xnbept+iLu5qgO29TE/XFXZ2rO29i0uSO86acf8GFU0+/aNRbLz5j2vQZpzUxY+as6bOH6D0C5sxtZt68ubPnT58185IZM4YvWHjpZYsWX965ZJLeo6ml+uKu3qY7P65lV3RdOXMwX8FerncKmKODOVw199KucXm/v/Z2nXY1WXd+jKtXXPMOncotZZCjpi2+Vm92PNfpnKt36s7F1HfpxICkD5Jl2fWjxun9jqVDrt6tG693w3tu1OsHKG+Qm3RwgN678n16S6ETrnTfdYauulmvHrCigmTZ+z+wWm/aQK93pfvut+YWvXYQiguSZdmtetd6erEr3XdNl145KIUGyS5p8pf42/RiTx/UffdZ+iG9cnDyBvmwDg7SyOC/Tj6il3r6qO77qI6r9MJBKjpIdvsavXWfGP8BLsBa3feruj+m1w1W4UGydYG/As/TCz3N130fccfH9bJBKz5Ilk3Vm7/qE3qZp2t035VK5U69qAVlBMk+qXc/Yr1e5Wm97rtS6dZrWpE3yHk62JIuvX2lUvmUXuTp07rvyl2f0WtaUU6QrFPvX6ms0ms8bdB9Vz6rl7SkpCDDlugDKhfoNZ5G674X6RWtKSlItvaYf4/crZd4uke2fa9e0KKygmSf0yfEfrNE7mvc9UZdb1XeIPfrYMv04zQT9AJPDzTu+kFdb1V5QbJNjU+4Q9c9NX637VxdblmJQTY3PqFD1z19vmHT03S5ZSUGyc5qeEKPLntq+KHo8braujKD3Lyl/gmrddnTQ3Vb3rpNV1uXN8gDOhhDw5chHtJVT1+o2/IKXYyg1CDZ9ronDNVFT3U7rtyuixGUG+TK+kfooqe6DX9R12IoN0jDH5G65qluw1/StRjyBon5Jf86D9c9Qtcsfbl/vzse0cUYSg5yS90jHtVFR1/p3+9juhZFyUGyr/Y/4mu65ujr/fu9WNeiKDvIzv5HrNU1R8Nr292lS3GUHaTuMwPTdc3RN2rbvU+X4sgb5AodjOWbtUdE+qRZWo/Xtrtbl+IoPcgTtUcs1CVHe2rbTfTbckoPsrf2iG/pkqNvV3d7oq5EUnqQubVHjNElR/uqu43zYedjlR5kXe3nRs7WJUe1D/nt1JVI8gb5jg5GU/shyn264qj2Q9GbdSWS8oN8t/qI7+mKo9rPUyT5uolFkCerj/i+rjia2LfZp3QhlvKDzKo+ItUfk1E93bfZZJ8AKD/ID6qP2K4rju7q22yyDy3lDZLwd8NUv7O+Xxcc7ejb7A91IRaDID/qe8QWXXBUPY89uhCLQZBn+h4xSRccVc9jgS7EYhBkd98jtuqCo+p5nKoLsRgE+XH1Gbpg6EDyveYNclAH49lWfYYuGHp2167ep5dufC7dxywNgmTPP9/z3NLJvYm+Bfc64xAEdQhihiBm8gZ5QgeRBkHMEMQMQczkDZLsy81oRBAzBDFDEDMEMZM3yE90EGkQxAxBzBDEDEHM5A3ygg4iDYKYIYgZgpghiJm8QV4XP7zRDghihiBmCGKGIGbyBunUQaRBEDMEMUMQMwQxkzfIizqINAhihiBmCGKGIGbyBvmpDiINgpghiBmCmCGImbxBfqaDSIMgZghihiBmCGImb5BE//sSKIKYIYgZgpghiJm8QaboINIgiBmCmCGIGYKYyRvk5zqINAhihiBmCGKGIGbyBhmrg0iDIGYIYoYgZghiJm+Qx3QQaRDEDEHMvKQnH0CQghDETN4gh3QQaRDEDEHMEMTMmXryAffqINIgiBmCmCGIGYKYyRtkvA4ijQ168gEEKQhBzBDEDEHMEMQMQcws0pMPIEhBCGKGIGYIYoYgZghiZpWefABBCkIQMwQxQxAzBDFDEDN79eQDCFIQgpghiBmCmCGIGYKY+YWefABBCkIQMwQxQxAzBDFzoZ58AEEKQhAzBDFDEDMEMUMQM2P05AMIUhCCmCGIGYKYIYgZgpj5pZ58AEEKQhAzBDFDEDMEMUMQM3v05AMIUhCCmCGIGYKYIYgZgpj5lZ58AEEKQhAzBDFDEDMEMfNrPfkAghSEIGYIYoYgZghihiBmduvJBxCkIAQxQxAzBDFDEDOX6ckHEKQgBDFDEDMEMUMQMwQxM1JPPoAgBSGIGYKYIYgZgph5Uk8+gCAFIYgZgpghiBmCmMn7pZNDOog08v4E1RQdRBp5f9X4izqINDboyQe8oINI4zd68gEHdRBp7NSTD7hTB5HGaD35gJt0EGmcoycfcK0OIo0hevIBh3UQaRzSkw/o1UGk0aknH/CyDiKNOXryAb/VQaQxUU8+5IBOIollevAh23QSSdygBx8yUyeRwgE996AROooUfqfnHvR7HUUKI/Tcg7p0FCnk/f5UpdKpo0jhbj33oCU6ihT+oOceNElHkcLLeu5hN+os4ntWT72JhTqM+P6op97En3QY8Z2vp97En3UY8e3XU2/iL4/oNGJbq4fe1EU6jtgW65k3NVbHEVuPnnlT1z2q84gr7yffq17SGyCq207QE38Nq9fpLRDT/Xrgr+kevQUiekaPOwf+opXOrXrYufxVb4NIVupR57Reb4QYXpmgB53bPr0XWve3v+sxD8Caf+jt0Jp5B/WMB2jsyXpLDN6CVnMc0blZb4vBGLZ35QC+RdjU/odn690xENef8s/R3Vv1WFvy1JzLH5//ij4Ix7d82eSeqzd1/Ku7u/vfEw/3tPKneHM7evdv6liz/T9LDv93Y+//tqzQjeCo5XpwBSFIAEHMEMQMQcwQxAxBzBAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgsf8DO8gIJdie9LgAAAAASUVORK5CYII="
 
 
 class TimestampDisplay(QWidget):
@@ -47,7 +52,7 @@ class TimestampDisplay(QWidget):
         self.formatted_timestamp: str
 
         self.label = QLabel(
-            f"<b>{self.timestamp_name}</b><br><i>(example: {example})</i>",
+            f"<b><u>{self.timestamp_name}</b></u><br>Example: <i>{example}</i>",
             alignment=Qt.AlignmentFlag.AlignBottom,
         )
 
@@ -122,6 +127,10 @@ class TimestamperUI(QWidget):
 
     def setup_ui(self):
         """Builds UI and initializes properties."""
+
+        pixmap = QPixmap()
+        pixmap.loadFromData(base64.b64decode(ICON_STRING))
+        self.setWindowIcon(QIcon(pixmap))
 
         self.setWindowTitle("Timestamper")
         self.setFont("Verdana")
